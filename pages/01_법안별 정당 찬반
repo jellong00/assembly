@@ -1,0 +1,41 @@
+import plotly.express as px
+import streamlit as st
+
+st.set_page_config(page_title="법안별 표결 분포", page_icon="🔍", layout="wide")
+st.title("🔍 법안별 정당 찬반 분포 검색")
+
+if not st.session_state.get("loaded"):
+    st.warning("먼저 **01_대시보드** 페이지에서 데이터를 불러와주세요.")
+    st.stop()
+
+vote_df = st.session_state["vote_df"]
+
+bill_names = sorted(vote_df["BILL_NAME"].dropna().unique().tolist())
+
+query = st.text_input("법안명 검색어 입력", placeholder="예: 국민건강보험법")
+matched = [b for b in bill_names if query.strip() in b] if query.strip() else bill_names[:30]
+
+if not matched:
+    st.info("검색 결과가 없어요. 다른 검색어를 입력해보세요.")
+    st.stop()
+
+selected_bill = st.selectbox(f"법안 선택 ({len(matched)}건)", matched)
+bill_votes = vote_df[vote_df["BILL_NAME"] == selected_bill]
+
+col1, col2 = st.columns(2)
+col1.metric("표결일자", bill_votes["VOTE_DATE"].iloc[0] if not bill_votes.empty else "-")
+col2.metric("총 표결 인원", f"{len(bill_votes)}명")
+
+st.divider()
+
+dist = bill_votes.groupby(["POLY_NM", "RESULT_VOTE_MOD"]).size().reset_index(name="인원수")
+fig = px.bar(dist, x="POLY_NM", y="인원수", color="RESULT_VOTE_MOD", barmode="stack",
+             labels={"POLY_NM": "정당", "RESULT_VOTE_MOD": "표결결과", "인원수": "인원 수"},
+             color_discrete_map={"찬성": "#2E86DE", "반대": "#E74C3C", "기권": "#95A5A6", "불참": "#BDC3C7"})
+st.plotly_chart(fig, use_container_width=True)
+
+with st.expander("의원별 상세 표결 내역"):
+    st.dataframe(
+        bill_votes[["HG_NM", "POLY_NM", "RESULT_VOTE_MOD"]].sort_values(["POLY_NM", "HG_NM"]),
+        use_container_width=True, hide_index=True,
+    )
