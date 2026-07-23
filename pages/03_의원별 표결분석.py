@@ -275,7 +275,7 @@ def compute_member_similarity(vote_df, member_id, min_common_votes=10):
 # 사이드바
 # ============================================================
 st.sidebar.header("조회 조건")
-use_sample = st.sidebar.checkbox("샘플 데이터 사용", value=True)
+use_sample = st.sidebar.checkbox("샘플 데이터 사용", value=False)
 eraco = st.sidebar.selectbox("국회대수", ["제22대", "제21대", "제20대"], index=0)
 max_bills = st.sidebar.slider("조회할 최대 의안 수", 5, 100, 20, step=5)
 
