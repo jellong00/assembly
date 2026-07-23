@@ -5,7 +5,7 @@ st.set_page_config(page_title="법안별 표결 분포", page_icon="🔍", layou
 st.title("🔍 법안별 정당 찬반 분포 검색")
 
 if not st.session_state.get("loaded"):
-    st.warning("먼저 **01_대시보드** 페이지에서 데이터를 불러와주세요.")
+    st.warning("먼저 **표결분석** 페이지에서 데이터를 불러와주세요.")
     st.stop()
 
 vote_df = st.session_state["vote_df"]
