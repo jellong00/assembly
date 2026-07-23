@@ -267,7 +267,7 @@ def generate_sample_vote_data(n_bills=15, n_members=60, seed=42):
 # 사이드바
 # ============================================================
 st.sidebar.header("조회 조건")
-use_sample = st.sidebar.checkbox("샘플 데이터 사용", value=True,
+use_sample = st.sidebar.checkbox("샘플 데이터 사용", value=False,
                                   help="API 키가 없거나 실제 데이터를 아직 테스트하지 않았다면 체크하세요.")
 eraco = st.sidebar.selectbox("국회대수", ["제22대", "제21대", "제20대"], index=0)
 bill_kind = st.sidebar.selectbox("의안 종류 필터", ["전체", "법률안", "예산안", "동의안", "결의안"], index=1)
