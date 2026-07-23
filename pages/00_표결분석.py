@@ -9,7 +9,7 @@ st.title("📊 정당 일치율 분석 대시보드")
 BASE_URL = "https://open.assembly.go.kr/portal/openapi"
 VOTE_ENDPOINT = "nojepdqqaweusdfbi"   # 국회의원 본회의 표결정보
 BILL_ENDPOINT = "ALLBILLV2"          # 의안정보 통합 API
-MEMBER_ENDPOINT = "ALLNAMEMBER"      # 국회의원 인적사항 통합 API
+MEMBER_ENDPOINT = "nwvrqwxyaytdsfvhu"  # 국회의원 인적사항 데이터
 
 VALID_VOTES = ["찬성", "반대", "기권"]  # 불참 등은 일치율 계산에서 제외
 REELE_CANDIDATES = ["REELE_GBN_NM", "REELE_GBN", "SELECT_GBN_NM"]  # 재선여부 필드명 후보
@@ -203,7 +203,18 @@ member_df = st.session_state["member_df"]
 st.caption(f"수집된 의안 수: {vote_df['BILL_ID'].nunique()}건 · 표결 레코드 수: {len(vote_df):,}건")
 
 conc_df = compute_concordance(vote_df, group_cols=("BILL_ID", "POLY_NM"))
-merged = merge_votes_with_members(conc_df, member_df) if not member_df.empty else conc_df
+
+with st.expander("🛠️ (디버그) 인적사항 API 응답 컬럼 확인"):
+    st.write("member_df 컬럼 목록:", member_df.columns.tolist())
+    st.dataframe(member_df.head(3))
+
+if not member_df.empty and "HG_NM" in member_df.columns and "POLY_NM" in member_df.columns:
+    merged = merge_votes_with_members(conc_df, member_df)
+else:
+    st.warning("인적사항 데이터의 컬럼명이 예상과 달라서 조인을 건너뛰었어요. "
+               "위 디버그 expander를 열어서 실제 컬럼명을 확인해주세요.")
+    merged = conc_df
+
 reele_col = get_reele_col(merged)
 
 st.sidebar.divider()
