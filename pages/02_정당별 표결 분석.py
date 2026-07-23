@@ -363,9 +363,13 @@ if valid.empty:
     st.info("유효한 표결(찬성/반대/기권) 데이터가 부족합니다.")
 else:
     party_dist = valid.groupby(["party_name", "vote_result"]).size().reset_index(name="count")
-    st.plotly_chart(px.bar(party_dist, x="party_name", y="count", color="vote_result", barmode="stack",
-                            labels={"party_name": "정당", "count": "표결 건수", "vote_result": "표결결과"}),
+    party_total = party_dist.groupby("party_name")["count"].transform("sum")
+    party_dist["ratio"] = party_dist["count"] / party_total
+    st.plotly_chart(px.bar(party_dist, x="party_name", y="ratio", color="vote_result", barmode="stack",
+                            labels={"party_name": "정당", "ratio": "비율", "vote_result": "표결결과"},
+                            text=party_dist["ratio"].apply(lambda x: f"{x:.0%}")),
                      use_container_width=True)
+    st.caption("각 막대는 정당 내 표결 건수를 100%로 두고, 찬성/반대/기권이 차지하는 비율을 나타냅니다.")
 
 st.subheader("정당별 평균 표결 참여율")
 total_by_member = df.groupby(["party_name", "member_id"]).size().reset_index(name="votes")
@@ -376,25 +380,6 @@ party_participation = part_merged.groupby("party_name")["rate"].mean().reset_ind
 st.plotly_chart(px.bar(party_participation, x="party_name", y="rate",
                         labels={"rate": "평균 참여율", "party_name": "정당"}), use_container_width=True)
 st.caption("⚠️ '불참'은 표결 결과값 기준으로 계산했으며, API 응답 누락을 불참으로 자동 간주하지 않습니다.")
-
-st.subheader("정당별 표결 결집도")
-majority_df = compute_party_majority_ratio(df)
-rice_df = compute_rice_index(df)
-tab1, tab2 = st.tabs(["다수 표결 비율", "Rice Index"])
-with tab1:
-    if not majority_df.empty:
-        avg_majority = majority_df.groupby("party_name")["majority_ratio"].mean().reset_index()
-        st.plotly_chart(px.bar(avg_majority, x="party_name", y="majority_ratio"), use_container_width=True)
-        st.caption("다수 표결 비율 = max(찬성,반대,기권) / 정당 내 참여자 수 (불참 제외)")
-    else:
-        st.info("결집도를 계산할 데이터가 부족합니다.")
-with tab2:
-    if not rice_df.empty:
-        avg_rice = rice_df.groupby("party_name")["rice_index"].mean().reset_index()
-        st.plotly_chart(px.bar(avg_rice, x="party_name", y="rice_index"), use_container_width=True)
-        st.caption("Rice Index = abs(찬성-반대) / (찬성+반대). 찬성·반대가 모두 0인 의안은 결측 처리.")
-    else:
-        st.info("Rice Index를 계산할 데이터가 부족합니다.")
 
 st.subheader("여야 간 표결 갈등도 & 초당적 합의도")
 conflict_df = compute_bipartisan_conflict(df)
@@ -408,7 +393,14 @@ if not conflict_df.empty:
         st.markdown("**초당적 합의가 높은 의안 (상위 10)**")
         st.dataframe(conflict_df.sort_values("bipartisan_agreement_index", ascending=False)
                      [["bill_name", "bipartisan_agreement_index"]].head(10), hide_index=True, use_container_width=True)
-    st.caption("갈등도 = abs(여당 찬성률 - 야당 찬성률). 표결일 기준 여야 이력표를 자동 적용함 (공식 당론 자료 아님).")
+    st.markdown(
+        "📌 **계산식**\n"
+        "- 여당 찬성률 = 표결일 기준 그 시점 여당 소속 의원 중 찬성한 비율 (찬성/반대/기권만 참여로 집계, 불참 제외)\n"
+        "- 야당 찬성률 = 같은 방식으로 계산한 주요 야당의 찬성률\n"
+        "- 갈등도(conflict_index) = abs(여당 찬성률 − 야당 찬성률) → 0에 가까울수록 여야가 비슷하게 투표, 1에 가까울수록 정반대로 투표\n"
+        "- 초당적 합의도(bipartisan_agreement_index) = 1 − 갈등도\n"
+        "- 여당/야당 구분은 표결일 기준 이력표(사이드바 '적용 중인 여야 이력표 보기')를 자동 적용한 것이며 공식 당론 자료가 아닙니다."
+    )
 else:
     st.info("여야 매핑에 해당하는 정당의 표결 데이터가 부족하거나, 표결일이 이력표 범위 밖에 있습니다.")
 
