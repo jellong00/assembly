@@ -28,6 +28,31 @@ VOTE_RESULT_MAP = {
 }
 VALID_VOTE_VALUES = ["찬성", "반대", "기권"]
 
+# ============================================================
+# 국회대수·기간별 여당/야당 실제 이력 매핑 (수정 가능한 설정값)
+# 표결일(vote_date) 기준으로 자동 적용됨. 정권 교체 등으로 정보가 바뀌면 여기만 수정하면 됨.
+# 형식: (기간 시작일, 기간 종료일(없으면 None=현재까지), 여당, 주요 야당)
+# ============================================================
+RULING_OPPOSITION_PERIODS = [
+    (pd.Timestamp("2016-05-30"), pd.Timestamp("2017-05-09"), "새누리당", "더불어민주당"),
+    (pd.Timestamp("2017-05-10"), pd.Timestamp("2020-05-29"), "더불어민주당", "새누리당"),
+    (pd.Timestamp("2020-05-30"), pd.Timestamp("2022-05-09"), "더불어민주당", "국민의힘"),
+    (pd.Timestamp("2022-05-10"), pd.Timestamp("2024-05-29"), "국민의힘", "더불어민주당"),
+    (pd.Timestamp("2024-05-30"), pd.Timestamp("2025-06-03"), "국민의힘", "더불어민주당"),
+    (pd.Timestamp("2025-06-04"), None, "더불어민주당", "국민의힘"),
+]
+
+
+def get_ruling_opposition(vote_date):
+    """표결일을 기준으로 그 시점의 여당/주요 야당을 반환한다. 해당 기간이 없으면 (None, None)."""
+    if pd.isna(vote_date):
+        return None, None
+    d = pd.Timestamp(vote_date).normalize()
+    for start, end, ruling, opposition in RULING_OPPOSITION_PERIODS:
+        if d >= start and (end is None or d <= end):
+            return ruling, opposition
+    return None, None
+
 
 def get_api_key():
     try:
@@ -258,13 +283,22 @@ def compute_rice_index(vote_df):
     return grouped.reset_index()
 
 
-def compute_bipartisan_conflict(vote_df, ruling_parties, opposition_parties):
-    """갈등도 = abs(여당 찬성률 - 야당 찬성률). 여야 매핑은 사이드바 설정을 따름 (공식 자료 아님)."""
+def compute_bipartisan_conflict(vote_df):
+    """
+    갈등도 = abs(여당 찬성률 - 야당 찬성률).
+    여당/야당은 표결일(vote_date) 기준으로 RULING_OPPOSITION_PERIODS 매핑을 자동 적용한다.
+    (공식 당론 자료가 아니라 국회대수·기간별 실제 여야 구성 이력을 코드에 정리해둔 것)
+    """
     df = vote_df[vote_df["vote_result"].isin(VALID_VOTE_VALUES)].copy()
-    if df.empty:
+    if df.empty or "vote_date" not in df.columns:
         return pd.DataFrame()
-    df["bloc"] = np.where(df["party_name"].isin(ruling_parties), "여당",
-                    np.where(df["party_name"].isin(opposition_parties), "야당", "기타"))
+
+    ruling_opp = df["vote_date"].apply(get_ruling_opposition)
+    df["ruling_party"] = [x[0] for x in ruling_opp]
+    df["opposition_party"] = [x[1] for x in ruling_opp]
+
+    df["bloc"] = np.where(df["party_name"] == df["ruling_party"], "여당",
+                    np.where(df["party_name"] == df["opposition_party"], "야당", "기타"))
     df = df[df["bloc"].isin(["여당", "야당"])]
     if df.empty:
         return pd.DataFrame()
@@ -284,16 +318,22 @@ def compute_bipartisan_conflict(vote_df, ruling_parties, opposition_parties):
 # 사이드바
 # ============================================================
 st.sidebar.header("조회 조건")
-use_sample = st.sidebar.checkbox("샘플 데이터 사용", value=True)
+use_sample = st.sidebar.checkbox("샘플 데이터 사용", value=False)
 eraco = st.sidebar.selectbox("국회대수", ["제22대", "제21대", "제20대"], index=0)
 max_bills = st.sidebar.slider("조회할 최대 의안 수", 5, 100, 20, step=5)
 
-st.sidebar.subheader("여야 매핑 설정 (분석용)")
-st.sidebar.caption("API에 여당/야당 구분이 없어 아래 값을 직접 수정할 수 있습니다 (공식 자료 아님).")
-ruling_input = st.sidebar.text_input("여당 (콤마로 구분 가능)", "국민의힘")
-opposition_input = st.sidebar.text_input("주요 야당 (콤마로 구분 가능)", "더불어민주당")
-ruling_parties = [p.strip() for p in ruling_input.split(",") if p.strip()]
-opposition_parties = [p.strip() for p in opposition_input.split(",") if p.strip()]
+st.sidebar.subheader("여야 매핑 (자동 적용)")
+st.sidebar.caption("API에 여당/야당 구분이 없어, 표결일 기준으로 아래 이력표를 코드에서 자동 적용합니다 (공식 당론 자료는 아님).")
+with st.sidebar.expander("적용 중인 여야 이력표 보기"):
+    mapping_display = pd.DataFrame(
+        [
+            {"기간 시작": s.strftime("%Y-%m-%d"), "기간 종료": (e.strftime("%Y-%m-%d") if e is not None else "현재"),
+             "여당": r, "주요 야당": o}
+            for s, e, r, o in RULING_OPPOSITION_PERIODS
+        ]
+    )
+    st.dataframe(mapping_display, hide_index=True, use_container_width=True)
+    st.caption("이 표는 파일 상단 RULING_OPPOSITION_PERIODS 에서 수정할 수 있습니다.")
 
 if use_sample:
     st.info("⚠️ 현재 샘플 데이터를 사용 중입니다. 실제 통계가 아니며 기능 시연용입니다.")
@@ -357,7 +397,7 @@ with tab2:
         st.info("Rice Index를 계산할 데이터가 부족합니다.")
 
 st.subheader("여야 간 표결 갈등도 & 초당적 합의도")
-conflict_df = compute_bipartisan_conflict(df, ruling_parties, opposition_parties)
+conflict_df = compute_bipartisan_conflict(df)
 if not conflict_df.empty:
     col1, col2 = st.columns(2)
     with col1:
@@ -368,9 +408,9 @@ if not conflict_df.empty:
         st.markdown("**초당적 합의가 높은 의안 (상위 10)**")
         st.dataframe(conflict_df.sort_values("bipartisan_agreement_index", ascending=False)
                      [["bill_name", "bipartisan_agreement_index"]].head(10), hide_index=True, use_container_width=True)
-    st.caption("갈등도 = abs(여당 찬성률 - 야당 찬성률). 여야 매핑은 사이드바에서 직접 설정한 값을 기준으로 함 (공식 자료 아님).")
+    st.caption("갈등도 = abs(여당 찬성률 - 야당 찬성률). 표결일 기준 여야 이력표를 자동 적용함 (공식 당론 자료 아님).")
 else:
-    st.info("여야 매핑에 해당하는 정당의 표결 데이터가 부족합니다. 사이드바의 여야 매핑을 확인해주세요.")
+    st.info("여야 매핑에 해당하는 정당의 표결 데이터가 부족하거나, 표결일이 이력표 범위 밖에 있습니다.")
 
 st.subheader("정당 간 표결 유사도 히트맵")
 if not valid.empty:
