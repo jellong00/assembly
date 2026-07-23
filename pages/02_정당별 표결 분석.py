@@ -379,8 +379,15 @@ if not valid.empty:
     sim_matrix = pd.DataFrame(index=pivot.columns, columns=pivot.columns, dtype=float)
     for p1 in pivot.columns:
         for p2 in pivot.columns:
+            if p1 == p2:
+                # 같은 정당끼리는 자기 자신과의 비교이므로 1.0으로 고정
+                # (같은 이름의 컬럼을 두 번 선택하면 pandas가 컬럼을 중복으로 취급해
+                #  Series가 아닌 DataFrame이 반환되면서 대입 시 ValueError가 발생함)
+                sim_matrix.loc[p1, p2] = 1.0
+                continue
             common = pivot[[p1, p2]].dropna()
-            sim_matrix.loc[p1, p2] = (common[p1] == common[p2]).mean() if not common.empty else None
+            common.columns = ["a", "b"]  # 컬럼명 충돌 방지
+            sim_matrix.loc[p1, p2] = (common["a"] == common["b"]).mean() if not common.empty else None
     st.plotly_chart(px.imshow(sim_matrix.astype(float), text_auto=".2f", color_continuous_scale="Blues",
                                labels=dict(color="유사도")), use_container_width=True)
     st.caption("유사도 = 두 정당의 (의안별 다수 입장 기준) 동일 방향 표결 비율. 참고용 지표이며 인과관계를 의미하지 않습니다.")
