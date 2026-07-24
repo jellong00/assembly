@@ -37,11 +37,11 @@ VOTE_API_URL = (
     "https://open.assembly.go.kr/portal/openapi/nojepdqqaweusdfbi"
 )
 
-CONNECT_TIMEOUT = 10
+CONNECT_TIMEOUT = 30
 READ_TIMEOUT = 60
 
-REQUEST_DELAY = 0.3
-MAX_RETRIES = 3
+REQUEST_DELAY = 1.0
+MAX_RETRIES = 5
 
 REQUEST_HEADERS = {
     "User-Agent": (
