@@ -15,26 +15,6 @@ DATA_DIR = "data"
 VALID_VOTE_VALUES = ["찬성", "반대", "기권"]
 VOTE_COLOR_MAP = {"찬성": "#1f77b4", "반대": "#d62728", "기권": "#7f7f7f"}  # 찬성=파랑, 반대=빨강, 기권=회색
 
-RULING_OPPOSITION_PERIODS = [
-    (pd.Timestamp("2016-05-30"), pd.Timestamp("2017-05-09"), "새누리당", "더불어민주당"),
-    (pd.Timestamp("2017-05-10"), pd.Timestamp("2020-05-29"), "더불어민주당", "새누리당"),
-    (pd.Timestamp("2020-05-30"), pd.Timestamp("2022-05-09"), "더불어민주당", "국민의힘"),
-    (pd.Timestamp("2022-05-10"), pd.Timestamp("2024-05-29"), "국민의힘", "더불어민주당"),
-    (pd.Timestamp("2024-05-30"), pd.Timestamp("2025-06-03"), "국민의힘", "더불어민주당"),
-    (pd.Timestamp("2025-06-04"), None, "더불어민주당", "국민의힘"),
-]
-
-
-def get_ruling_opposition(vote_date):
-    if pd.isna(vote_date):
-        return None, None
-    d = pd.Timestamp(vote_date).normalize()
-    for start, end, ruling, opposition in RULING_OPPOSITION_PERIODS:
-        if d >= start and (end is None or d <= end):
-            return ruling, opposition
-    return None, None
-
-
 @st.cache_data
 def load_vote_info():
     df = pd.read_csv(f"{DATA_DIR}/vote_info.csv", dtype={"의안번호": str})
@@ -58,17 +38,14 @@ def load_bill_summary():
 
 
 def compute_bipartisan_conflict(vote_df):
+    """
+    갈등도 = abs(여당 찬성률 - 야당 찬성률).
+    22대 국회 기준으로 더불어민주당을 여당, 나머지 정당 전체를 야당으로 고정해서 계산한다.
+    """
     df = vote_df[vote_df["표결결과"].isin(VALID_VOTE_VALUES)].copy()
     if df.empty:
         return pd.DataFrame()
-    ruling_opp = df["표결일자"].apply(get_ruling_opposition)
-    df["여당"] = [x[0] for x in ruling_opp]
-    df["야당"] = [x[1] for x in ruling_opp]
-    df["진영"] = np.where(df["정당명"] == df["여당"], "여당",
-                    np.where(df["정당명"] == df["야당"], "야당", "기타"))
-    df = df[df["진영"].isin(["여당", "야당"])]
-    if df.empty:
-        return pd.DataFrame()
+    df["진영"] = np.where(df["정당명"] == "더불어민주당", "여당", "야당")
     yes_rate = (
         df.assign(is_yes=(df["표결결과"] == "찬성").astype(int))
         .groupby(["의안번호", "의안명", "진영"])["is_yes"].mean().unstack().reset_index()
@@ -97,17 +74,6 @@ except FileNotFoundError:
 st.caption("📌 데이터 기준: 22대 국회 (열린국회정보 포털 다운로드 스냅샷)")
 
 st.sidebar.header("조회 조건")
-st.sidebar.subheader("여야 매핑 (자동 적용)")
-st.sidebar.caption("데이터에 여당/야당 구분이 없어, 표결일 기준으로 아래 이력표를 코드에서 자동 적용합니다 (공식 당론 자료는 아님).")
-with st.sidebar.expander("적용 중인 여야 이력표 보기"):
-    mapping_display = pd.DataFrame(
-        [
-            {"기간 시작": s.strftime("%Y-%m-%d"), "기간 종료": (e.strftime("%Y-%m-%d") if e is not None else "현재"),
-             "여당": r, "주요 야당": o}
-            for s, e, r, o in RULING_OPPOSITION_PERIODS
-        ]
-    )
-    st.dataframe(mapping_display, hide_index=True, use_container_width=True)
 
 bill_options = vote_df.drop_duplicates(subset=["의안번호"])[["의안번호", "의안명"]]
 search_kw = st.text_input("의안명 검색")
@@ -191,9 +157,9 @@ if not conflict_df.empty:
     c5, c6 = st.columns(2)
     c5.metric("여야 갈등도", f"{row['갈등도']:.2f}")
     c6.metric("초당적 합의도", f"{row['초당적합의도']:.2f}")
-    st.caption("갈등도 = abs(여당 찬성률 - 야당 찬성률). 표결일 기준 여야 이력표를 자동 적용함 (공식 당론 자료 아님).")
+    st.caption("갈등도 = abs(여당 찬성률 - 야당 찬성률). 더불어민주당을 여당, 나머지 정당 전체를 야당으로 고정 계산 (공식 당론 자료 아님).")
 else:
-    st.info("여야 매핑에 해당하는 정당 표결 데이터가 부족합니다.")
+    st.info("표결 데이터가 부족하여 갈등도를 계산할 수 없습니다.")
 
 st.subheader("의원별 표결 결과 표")
 st.dataframe(bill_vote_df[["의원명", "정당명", "표결결과"]], hide_index=True, use_container_width=True)
