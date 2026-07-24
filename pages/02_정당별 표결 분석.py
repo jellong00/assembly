@@ -13,6 +13,7 @@ st.title("02. 정당별 표결분석")
 
 DATA_DIR = "data"
 VALID_VOTE_VALUES = ["찬성", "반대", "기권"]
+VOTE_COLOR_MAP = {"찬성": "#1f77b4", "반대": "#d62728", "기권": "#7f7f7f"}  # 찬성=파랑, 반대=빨강, 기권=회색
 
 # ============================================================
 # 국회대수·기간별 여당/야당 실제 이력 매핑 (수정 가능한 설정값)
@@ -110,16 +111,26 @@ else:
     st.plotly_chart(
         px.bar(party_dist, x="정당명", y="ratio", color="표결결과", barmode="stack",
                labels={"정당명": "정당", "ratio": "비율", "표결결과": "표결결과"},
-               text=party_dist["ratio"].apply(lambda x: f"{x:.0%}")),
+               text=party_dist["ratio"].apply(lambda x: f"{x:.0%}"),
+               color_discrete_map=VOTE_COLOR_MAP),
         use_container_width=True,
     )
     st.caption("각 막대는 정당 내 표결 건수를 100%로 두고, 찬성/반대/기권이 차지하는 비율을 나타냅니다.")
 
-st.subheader("정당별 표결 참여 건수")
-party_votes = df.groupby("정당명").size().reset_index(name="표결건수")
-st.plotly_chart(px.bar(party_votes, x="정당명", y="표결건수", labels={"정당명": "정당", "표결건수": "표결 건수"}),
-                 use_container_width=True)
-st.caption("⚠️ 이 데이터셋에는 '불참' 기록이 없어 참여율(%) 대신 실제 표결 참여 건수(원자료 기준)로 표시합니다.")
+st.subheader("정당별 표결 참여율")
+total_bills_in_view = df["의안번호"].nunique()
+party_member_count = df.groupby("정당명")["의원명"].nunique()
+party_vote_count = df.groupby("정당명").size()
+party_participation = (party_vote_count / (party_member_count * total_bills_in_view)).reset_index()
+party_participation.columns = ["정당명", "참여율"]
+st.plotly_chart(
+    px.bar(party_participation, x="정당명", y="참여율", labels={"정당명": "정당", "참여율": "표결 참여율"}),
+    use_container_width=True,
+)
+st.caption(
+    "참여율 = (해당 정당 소속 의원의 실제 표결 건수) ÷ (정당 소속 의원 수 × 전체 의안 수). "
+    "⚠️ 이 데이터셋에는 '불참' 기록이 없어, 소속 의원 수 대비 실제 표결 참여 비율로 근사 계산한 값입니다."
+)
 
 st.subheader("여야 간 표결 갈등도 & 초당적 합의도")
 conflict_df = compute_bipartisan_conflict(df)
