@@ -13,6 +13,7 @@ st.title("04. 의안별 상세분석")
 
 DATA_DIR = "data"
 VALID_VOTE_VALUES = ["찬성", "반대", "기권"]
+VOTE_COLOR_MAP = {"찬성": "#1f77b4", "반대": "#d62728", "기권": "#7f7f7f"}  # 찬성=파랑, 반대=빨강, 기권=회색
 
 RULING_OPPOSITION_PERIODS = [
     (pd.Timestamp("2016-05-30"), pd.Timestamp("2017-05-09"), "새누리당", "더불어민주당"),
@@ -169,8 +170,11 @@ c3.metric("기권", int((valid["표결결과"] == "기권").sum()))
 st.subheader("정당별 찬성·반대·기권 분포")
 if not valid.empty:
     party_dist = valid.groupby(["정당명", "표결결과"]).size().reset_index(name="count")
-    st.plotly_chart(px.bar(party_dist, x="정당명", y="count", color="표결결과", barmode="stack"),
-                     use_container_width=True)
+    st.plotly_chart(
+        px.bar(party_dist, x="정당명", y="count", color="표결결과", barmode="stack",
+               color_discrete_map=VOTE_COLOR_MAP),
+        use_container_width=True,
+    )
 
 st.subheader("정당별 찬성률")
 if not valid.empty:
