@@ -97,12 +97,12 @@ conflict_df = compute_bipartisan_conflict(df)
 if not conflict_df.empty:
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("**갈등도가 높은 의안 (상위 10)**")
-        st.dataframe(conflict_df.sort_values("갈등도", ascending=False)[["의안명", "갈등도"]].head(10),
+        st.markdown("**갈등도가 높은 의안 (상위 20)**")
+        st.dataframe(conflict_df.sort_values("갈등도", ascending=False)[["의안명", "갈등도"]].head(20),
                      hide_index=True, use_container_width=True)
     with col2:
-        st.markdown("**초당적 합의가 높은 의안 (상위 10)**")
-        st.dataframe(conflict_df.sort_values("초당적합의도", ascending=False)[["의안명", "초당적합의도"]].head(10),
+        st.markdown("**초당적 합의가 높은 의안 (상위 20)**")
+        st.dataframe(conflict_df.sort_values("초당적합의도", ascending=False)[["의안명", "초당적합의도"]].head(20),
                      hide_index=True, use_container_width=True)
     st.markdown(
         "📌 **계산식**\n"
