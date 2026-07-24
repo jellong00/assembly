@@ -36,6 +36,11 @@ st.markdown("""
 | 의안 제안자정보 (BILLINFOPPSR) | 의안 제안자 목록 | BILL_ID |
 | 국회의원 인적사항 | 위원회, 재선여부, 당선대수 등 | (전부 선택) |
 
+⚠️ 표결정보 · 상세정보 · 제안자정보는 **BILL_ID가 있어야만 조회 가능**합니다.
+따라서 이 대시보드는 항상 **① 의안 목록(ALLBILLV2) 조회 → ② 확보한 BILL_ID로 표결정보 등을 반복 조회**
+하는 순서로 데이터를 수집합니다. 조회 의안 수가 많으면 시간이 걸릴 수 있어,
+각 페이지 사이드바에서 한 세션에 조회할 의안 수를 제한할 수 있습니다.
+""")
 
 st.subheader("데이터 갱신 방식")
 st.markdown("""
@@ -52,6 +57,12 @@ st.markdown("""
 - **04. 의안별 상세분석**: 특정 의안의 제안 정보, 정당별·의원별 표결 결과 상세
 """)
 
+st.subheader("API 키 설정 방법")
+st.code(
+    'OPEN_ASSEMBLY_API_KEY = "발급받은 API 키"',
+    language="toml",
+)
+st.caption("`.streamlit/secrets.toml` (로컬) 또는 Streamlit Cloud > App settings > Secrets 에 위와 같이 등록하세요.")
 
 st.subheader("⚠️ 데이터 해석 시 주의사항")
 st.warning("""
