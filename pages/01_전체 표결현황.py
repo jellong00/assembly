@@ -17,8 +17,8 @@ DATA_DIR = "data"
 
 @st.cache_data
 def load_vote_info():
-    """의원별 본회의 표결정보 (data/vote_info.csv.gz)"""
-    df = pd.read_csv(f"{DATA_DIR}/vote_info.csv.gz", dtype={"의안번호": str})
+    """의원별 본회의 표결정보 (data/vote_info.csv)"""
+    df = pd.read_csv(f"{DATA_DIR}/vote_info.csv", dtype={"의안번호": str})
     df["표결일자"] = pd.to_datetime(df["표결일자"], errors="coerce")
     return df
 
@@ -27,7 +27,7 @@ try:
     vote_df = load_vote_info()
 except FileNotFoundError:
     st.error(
-        "데이터 파일을 찾을 수 없습니다. 레포 루트에 `data/vote_info.csv.gz` 파일이 있는지 확인해주세요."
+        "데이터 파일을 찾을 수 없습니다. 레포 루트에 `data/vote_info.csv` 파일이 있는지 확인해주세요."
     )
     st.stop()
 
