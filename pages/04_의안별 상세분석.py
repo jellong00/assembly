@@ -19,7 +19,15 @@ BILL_LIST_API_URL = "https://open.assembly.go.kr/portal/openapi/ALLBILLV2"
 VOTE_API_URL = "https://open.assembly.go.kr/portal/openapi/nojepdqqaweusdfbi"
 BILL_DETAIL_API_URL = "https://open.assembly.go.kr/portal/openapi/BILLINFODETAIL"
 BILL_PROPOSER_API_URL = "https://open.assembly.go.kr/portal/openapi/BILLINFOPPSR"
-DEFAULT_TIMEOUT = 25     # 국내 공공 API라 해외 서버(예: Streamlit Cloud)에서는 응답이 느릴 수 있어 넉넉하게 설정
+DEFAULT_TIMEOUT = 8      # 너무 길게 기다리지 않고 빨리 실패해서 샘플 데이터로 전환할 수 있게 함
+
+# 일부 공공기관 서버는 requests 라이브러리 기본 User-Agent(python-requests/x.x)를
+# 봇 트래픽으로 간주해 차단하는 경우가 있어, 일반 브라우저처럼 보이는 헤더를 사용한다.
+REQUEST_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+}
 REQUEST_DELAY = 0.15
 
 VOTE_RESULT_MAP = {
@@ -74,9 +82,9 @@ def call_api(base_url, params, page_index=1, page_size=100):
     # 국내 공공 API 서버 응답 지연/일시 오류 대비 최대 2회 재시도
     last_error = None
     resp = None
-    for attempt in range(2):
+    for attempt in range(1):  # IP 차단 등 구조적 문제면 재시도해도 소용없어 1회만 시도
         try:
-            resp = requests.get(base_url, params=query, timeout=DEFAULT_TIMEOUT)
+            resp = requests.get(base_url, params=query, headers=REQUEST_HEADERS, timeout=DEFAULT_TIMEOUT)
             resp.raise_for_status()
             last_error = None
             break
