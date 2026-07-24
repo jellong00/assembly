@@ -19,7 +19,7 @@ BILL_LIST_API_URL = "https://open.assembly.go.kr/portal/openapi/ALLBILLV2"
 VOTE_API_URL = "https://open.assembly.go.kr/portal/openapi/nojepdqqaweusdfbi"
 BILL_DETAIL_API_URL = "https://open.assembly.go.kr/portal/openapi/BILLINFODETAIL"
 BILL_PROPOSER_API_URL = "https://open.assembly.go.kr/portal/openapi/BILLINFOPPSR"
-DEFAULT_TIMEOUT = 10
+DEFAULT_TIMEOUT = 25     # 국내 공공 API라 해외 서버(예: Streamlit Cloud)에서는 응답이 느릴 수 있어 넉넉하게 설정
 REQUEST_DELAY = 0.15
 
 VOTE_RESULT_MAP = {
@@ -71,11 +71,20 @@ def call_api(base_url, params, page_index=1, page_size=100):
     query = {"KEY": api_key, "Type": "json", "pIndex": page_index, "pSize": page_size}
     query.update({k: v for k, v in params.items() if v not in (None, "")})
 
-    try:
-        resp = requests.get(base_url, params=query, timeout=DEFAULT_TIMEOUT)
-        resp.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        return [], 0, f"API 호출 실패: {e}"
+    # 국내 공공 API 서버 응답 지연/일시 오류 대비 최대 2회 재시도
+    last_error = None
+    resp = None
+    for attempt in range(2):
+        try:
+            resp = requests.get(base_url, params=query, timeout=DEFAULT_TIMEOUT)
+            resp.raise_for_status()
+            last_error = None
+            break
+        except requests.exceptions.RequestException as e:
+            last_error = e
+            time.sleep(1)
+    if last_error is not None:
+        return [], 0, f"API 호출 실패: {last_error}"
 
     try:
         data = resp.json()
