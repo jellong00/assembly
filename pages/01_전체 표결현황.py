@@ -17,7 +17,7 @@ st.title("01. 전체 표결현황")
 # ============================================================
 BILL_LIST_API_URL = "https://open.assembly.go.kr/portal/openapi/ALLBILLV2"          # 의안정보 통합 API (BILL_ID 확보용)
 VOTE_API_URL = "https://open.assembly.go.kr/portal/openapi/nojepdqqaweusdfbi"        # 국회의원 본회의 표결정보
-DEFAULT_TIMEOUT = 8      # 너무 길게 기다리지 않고 빨리 실패해서 샘플 데이터로 전환할 수 있게 함
+DEFAULT_TIMEOUT = 15     # 국내 공공 API 응답 지연을 고려해 여유 있게 설정
 
 # 일부 공공기관 서버는 requests 라이브러리 기본 User-Agent(python-requests/x.x)를
 # 봇 트래픽으로 간주해 차단하는 경우가 있어, 일반 브라우저처럼 보이는 헤더를 사용한다.
@@ -57,10 +57,10 @@ def call_api(base_url, params, page_index=1, page_size=100):
     query = {"KEY": api_key, "Type": "json", "pIndex": page_index, "pSize": page_size}
     query.update({k: v for k, v in params.items() if v not in (None, "")})
 
-    # 국내 공공 API 서버 응답 지연/일시 오류 대비 최대 2회 재시도
+    # 국내 공공 API 서버 응답 지연/일시 오류 대비 재시도 (지수 백오프: 1초 → 2초 → 4초)
     last_error = None
     resp = None
-    for attempt in range(1):  # IP 차단 등 구조적 문제면 재시도해도 소용없어 1회만 시도
+    for attempt in range(3):
         try:
             resp = requests.get(base_url, params=query, headers=REQUEST_HEADERS, timeout=DEFAULT_TIMEOUT)
             resp.raise_for_status()
@@ -68,7 +68,8 @@ def call_api(base_url, params, page_index=1, page_size=100):
             break
         except requests.exceptions.RequestException as e:
             last_error = e
-            time.sleep(1)
+            if attempt < 2:
+                time.sleep(2 ** attempt)
     if last_error is not None:
         return [], 0, f"API 호출 실패: {last_error}"
 
@@ -124,23 +125,27 @@ def fetch_all_pages(base_url, params, page_size=100, max_pages=20, progress_labe
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_bill_list(eraco, bill_kind=None, rgs_conf_rslt=None, max_pages=30):
-    """의안정보 통합 API(ALLBILLV2)로 의안 목록(BILL_ID 포함)을 조회한다."""
+    """
+    의안정보 통합 API(ALLBILLV2)로 의안 목록(BILL_ID 포함)을 조회한다.
+    ⚠️ 실패 시 예외를 던진다 (빈 결과를 캐싱하지 않기 위함).
+       @st.cache_data는 함수가 정상 반환했을 때만 결과를 캐싱하므로,
+       여기서 raise 하면 실패한 호출은 절대 캐싱되지 않고 다음 호출에서 다시 시도된다.
+    """
     params = {"ERACO": eraco, "BILL_KND": bill_kind, "RGS_CONF_RSLT": rgs_conf_rslt}
     rows, err = fetch_all_pages(BILL_LIST_API_URL, params, page_size=100, max_pages=max_pages,
                                  progress_label="의안 목록 조회 중...")
     if err:
-        st.warning(f"의안 목록 조회 오류: {err}")
-        return pd.DataFrame()
+        raise RuntimeError(err)
     return pd.DataFrame(rows)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_vote_info_single(bill_id, age):
-    """단일 의안(BILL_ID)의 의원별 본회의 표결정보를 조회한다."""
+    """단일 의안(BILL_ID)의 의원별 본회의 표결정보를 조회한다. 실패 시 예외를 던진다 (캐싱 방지)."""
     rows, err = fetch_all_pages(VOTE_API_URL, {"AGE": age, "BILL_ID": bill_id}, page_size=300, max_pages=5)
     if err:
-        return pd.DataFrame(), err
-    return pd.DataFrame(rows), None
+        raise RuntimeError(err)
+    return pd.DataFrame(rows)
 
 
 def fetch_vote_info_bulk(bill_ids, age, max_bills=30):
@@ -154,11 +159,12 @@ def fetch_vote_info_bulk(bill_ids, age, max_bills=30):
     if bill_ids:
         bar = st.progress(0.0, text="의안별 표결정보 조회 중...")
         for i, bid in enumerate(bill_ids):
-            df, err = fetch_vote_info_single(bid, age)
-            if err:
-                errors.append(f"{bid}: {err}")
-            elif not df.empty:
-                all_dfs.append(df)
+            try:
+                df = fetch_vote_info_single(bid, age)
+                if not df.empty:
+                    all_dfs.append(df)
+            except RuntimeError as e:
+                errors.append(f"{bid}: {e}")
             bar.progress((i + 1) / len(bill_ids), text=f"의안별 표결정보 조회 중... ({i+1}/{len(bill_ids)})")
             time.sleep(REQUEST_DELAY)
         bar.empty()
@@ -290,14 +296,21 @@ eraco = st.sidebar.selectbox("국회대수", ["제22대", "제21대", "제20대"
 bill_kind = st.sidebar.selectbox("의안 종류 필터", ["전체", "법률안", "예산안", "동의안", "결의안"], index=1)
 max_bills = st.sidebar.slider("조회할 최대 의안 수", min_value=5, max_value=100, value=20, step=5,
                               help="의안 수가 많을수록 API 호출 시간이 오래 걸립니다.")
+if st.sidebar.button("🔄 캐시 지우고 새로고침"):
+    st.cache_data.clear()
+    st.rerun()
 
 if use_sample:
     st.info("⚠️ 현재 샘플 데이터를 사용 중입니다. 실제 통계가 아니며 기능 시연용입니다.")
     vote_df = generate_sample_vote_data(n_bills=max_bills)
 else:
     kind_param = None if bill_kind == "전체" else bill_kind
-    bill_list_raw = fetch_bill_list(eraco=eraco, bill_kind=kind_param, rgs_conf_rslt="원안가결", max_pages=5)
-    bill_list = standardize_bill_list_dataframe(bill_list_raw)
+    try:
+        bill_list_raw = fetch_bill_list(eraco=eraco, bill_kind=kind_param, rgs_conf_rslt="원안가결", max_pages=5)
+        bill_list = standardize_bill_list_dataframe(bill_list_raw)
+    except RuntimeError as e:
+        st.warning(f"의안 목록 조회 오류: {e}")
+        bill_list = pd.DataFrame()
 
     if bill_list.empty:
         st.warning("의안 목록을 가져오지 못했습니다. API 키 또는 조회 조건을 확인하거나 샘플 데이터를 사용해주세요.")
